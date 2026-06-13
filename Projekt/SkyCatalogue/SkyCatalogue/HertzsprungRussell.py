@@ -1,4 +1,5 @@
 import numpy as np
+from pathlib import Path
 
 
 
@@ -33,11 +34,70 @@ def HertzsprungRussellDiagram(result):
 
 
 
-def fitToIsochrone(bp_rp, absolute_mag):
+def fitToIsochrone(filepath, target_age):
     '''
     Fits the Hertzsprung-Russell diagram to an isochrone.
+    EEPS txz from mist has a bunch of files in it with data. Figure out how these work
     '''
     
+    iso_points = []
+    
+    eeps_path = Path(filepath)
+    for file in eeps_path.glob("*.track.eep"):
+        data = read_eep(file)
+        mass = float(file.name.split("M")[0]) / 100
+        
+        print(file.name, data.shape, mass)
+        ages = data["star_age"]
+        
+        if target_age < ages.min() or target_age > ages.max():
+                continue
+        
+        idx = np.argmin(np.abs(ages - target_age))
+            
+        iso_points.append((
+                mass,
+                data["log_Teff"][idx],
+                data["log_L"][idx]
+            ))
+    
+    
+    iso_points.sort(key=lambda x: x[0])
+    mass, logTeff, logL = zip(*iso_points)
+    
+    return (mass, logTeff, logL)
+
+
+
+def read_eep(file):
+    with open(file, "r") as f:
+        lines = f.readlines()
+
+    header_idx = None
+
+    # Find the header with actual column names
+    for i, line in enumerate(lines):
+        if line.startswith("#") and "star_age" in line:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        raise ValueError(f"Could not find header in {file}")
+
+    # Clean column names (remove '#')
+    header_line = lines[header_idx].replace("#", "").strip()
+
+    col_names = header_line.split()
+
+    data = np.genfromtxt(
+        file,
+        skip_header=header_idx + 1,
+        names=col_names,
+        dtype=None,
+        encoding=None,
+    )
+
+    return data
     
     
     
